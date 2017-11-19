@@ -4,6 +4,3 @@
 [submodule "lib/cxxopts"]
 	path = lib/cxxopts
 	url = https://github.com/jarro2783/cxxopts.git
-[submodule "lib/easyexif"]
-	path = lib/easyexif
-	url = https://github.com/mayanklahiri/easyexif.git

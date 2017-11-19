@@ -1,6 +1,5 @@
 #include <chrono>
 #include <cxxopts.hpp>
-#include <exif.h>
 #include <hevcimagefilereader.hpp>
 #include <log.hpp>
 #include <thread>
@@ -12,6 +11,7 @@ extern "C" {
     #include <libavutil/imgutils.h>
     #include <libavcodec/avcodec.h>
     #include <libswscale/swscale.h>
+    #include <exif-loader.h>
 };
 
 using namespace std;
@@ -185,7 +185,7 @@ RgbData decodeFrame(DataVector hevcData)
  * @param itemId
  * @return
  */
-easyexif::EXIFInfo extractExifData(HevcImageFileReader* reader, uint32_t contextId, uint32_t itemId)
+DataVector extractExifData(HevcImageFileReader* reader, uint32_t contextId, uint32_t itemId)
 {
     IdVector exifItemIds;
     DataVector exifData;
@@ -202,19 +202,54 @@ easyexif::EXIFInfo extractExifData(HevcImageFileReader* reader, uint32_t context
         throw logic_error("Exif data is empty");
     }
 
-    easyexif::EXIFInfo exifInfo;
+    return exifData;
+}
 
-    const int exifOffset = 4; // TODO: Derive this from data!
-    uint8_t* exifDataPtr = &exifData[exifOffset];
-    uint32_t exifDataLength = static_cast<uint32_t>(exifData.size() - exifOffset);
+/**
+ * libexif data loader without setting default values, blatantly stolen from vips
+ * @param data
+ * @param length
+ * @return
+ */
+ExifData* exifLoadDataWithoutFix(const uint8_t *data, const uint32_t length)
+{
+    ExifData *ed;
 
-    int parseRet = exifInfo.parseFromEXIFSegment(exifDataPtr, exifDataLength);
-
-    if (parseRet != 0) {
-        throw logic_error("Failed to parse EXIF data!");
+    if(!(ed = exif_data_new())) {
+        throw logic_error("could not allocate exif data");
     }
 
-    return exifInfo;
+    exif_data_unset_option(ed, EXIF_DATA_OPTION_FOLLOW_SPECIFICATION);
+    exif_data_load_data(ed, data, length);
+
+    return ed;
+}
+
+/**
+ * Parse exif data and set meta fields to vips image
+ * @param dataPtr
+ * @param dataLength
+ * @param image
+ */
+void parseAndAppendExif(uint8_t *dataPtr, uint32_t dataLength, VImage *image)
+{
+    ExifData* ed = exifLoadDataWithoutFix(dataPtr, dataLength);
+
+    if (!ed) {
+        throw logic_error("Failed to parse exif data");
+    }
+
+    // This doesn't to anything, we probably need to serialize all fields the same way vips does internally
+    image->set(VIPS_META_EXIF_NAME, nullptr, ed->data, ed->size);
+
+    // This does work though
+    ExifByteOrder byteOrder = exif_data_get_byte_order(ed);
+    ExifEntry *exifEntry = exif_data_get_entry(ed, EXIF_TAG_ORIENTATION);
+
+    if (exifEntry) {;
+        int orientation = exif_get_short(exifEntry->data, byteOrder);
+        image->set(VIPS_META_ORIENTATION, orientation);
+    }
 }
 
 
@@ -241,9 +276,6 @@ VImage getThumbnailImage(HevcImageFileReader& reader, uint32_t contextId, uint32
 
     return thumbImg;
 }
-
-
-
 
 /**
  * Build image from HEIC grid item
@@ -427,14 +459,12 @@ int convert(const string& inputFilename, const string& outputFilename, cxxopts::
         cout << "Export & decode HEVC: " << tileEncodeTime << "ms" << endl;
     }
 
-    try {
-        // Extract EXIF data;
-        easyexif::EXIFInfo exifInfo = extractExifData(&reader, contextId, gridItemId);
-        image.set(VIPS_META_ORIENTATION, exifInfo.Orientation);
-    }
-    catch (const logic_error& le) {
-        cerr << "Failed to set EXIF orientation: " << le.what() << endl;
-    }
+    DataVector exifData =  extractExifData(&reader, contextId, gridItemId);
+
+    uint8_t* exifDataPtr = &exifData[4];
+    uint32_t exifDataLength = static_cast<uint32_t>(exifData.size() - 4);
+
+    parseAndAppendExif(exifDataPtr, exifDataLength, &image);
 
     saveImage(image, outputFilename, options);
 

@@ -7,8 +7,10 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_MODULE_PATH})
 
 find_package(LibAV REQUIRED)
+
 find_package(PkgConfig)
 pkg_search_module(VIPS REQUIRED vips-cpp)
+pkg_search_module(EXIF REQUORED libexif)
 
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 
@@ -19,9 +21,7 @@ endif()
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wno-implicit-fallthrough")
 
 set(LIBHEIF_DIR ${PROJECT_SOURCE_DIR}/lib/heif)
-set(SOURCE_FILES
-        src/main.cpp
-        lib/easyexif/exif.cpp)
+set(SOURCE_FILES src/main.cpp)
 set(TIFIG tifig)
 
 add_subdirectory(${LIBHEIF_DIR})
@@ -32,8 +32,8 @@ add_executable(${TIFIG} ${SOURCE_FILES})
 include_directories(${LIBHEIF_DIR}/Srcs/common)
 include_directories(${LIBHEIF_DIR}/Srcs/reader)
 include_directories(lib/cxxopts/include)
-include_directories(lib/easyexif)
 include_directories(${VIPS_INCLUDE_DIRS})
+include_directories(${EXIF_INCLUDE_DIRS})
 
-target_link_libraries(${TIFIG} heifreader cxxopts)
-target_link_libraries(${TIFIG} ${VIPS_CFLAGS} ${VIPS_LDFLAGS} ${LIBAV_LIBRARIES} pthread)
+target_link_libraries(${TIFIG} heifreader pthread)
+target_link_libraries(${TIFIG} ${VIPS_LDFLAGS} ${LIBAV_LIBRARIES} ${EXIF_LDFLAGS})
