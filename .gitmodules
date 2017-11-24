@@ -1,6 +1,6 @@
 [submodule "lib/heif"]
 	path = lib/heif
-	url = https://github.com/monostream/heif.git
+	url = git@github.com:LukeLR/heif.git
 [submodule "lib/cxxopts"]
 	path = lib/cxxopts
 	url = https://github.com/jarro2783/cxxopts.git
